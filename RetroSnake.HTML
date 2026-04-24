@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroSnake™</title>
+    <style>
+        :root {
+            --sidebar-bg: #050505;
+            --ui-accent: #00d2ff;
+            --snake-accent: #00d2ff;
+            --separator-color: #000000;
+            --text-ui: #ffffff;
+            --sidebar-width: 350px;
+            --anim-speed: 0.8s;
+            --easing: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            color: var(--text-ui);
+        }
+
+        #root {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* Sidebar Architecture */
+        #sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            display: flex;
+            flex-direction: column;
+            padding: 60px 40px;
+            box-sizing: border-box;
+            z-index: 50;
+            position: relative;
+        }
+
+        #separator {
+            width: 3px;
+            height: 100%;
+            background: var(--separator-color);
+            position: relative;
+            z-index: 51;
+            transform: scaleY(0);
+            transform-origin: top;
+            transition: transform var(--anim-speed) var(--easing), background 0.4s ease, box-shadow 0.4s ease;
+        }
+
+        .state-active #separator {
+            transform: scaleY(1);
+            box-shadow: 0 0 20px var(--ui-accent);
+        }
+
+        /* UI Element Transitions */
+        .header-label, .stat-block, .config-panel {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity var(--anim-speed) var(--easing), transform var(--anim-speed) var(--easing);
+            font-weight: 300;
+        }
+
+        .state-active .header-label, 
+        .state-active .stat-block, 
+        .state-active .config-panel {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .state-active .stat-block:nth-child(2) { transition-delay: 0.1s; }
+        .state-active .stat-block:nth-child(3) { transition-delay: 0.2s; }
+        .state-active .stat-block:nth-child(4) { transition-delay: 0.3s; }
+        .state-active .config-panel { transition-delay: 0.4s; }
+
+        .header-label {
+            color: var(--ui-accent);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 60px;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--ui-accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 3rem;
+            font-weight: 100;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .progress-bg {
+            width: 100%;
+            height: 4px;
+            background: #111;
+            margin-top: 15px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        #progress-fill {
+            width: 0%;
+            height: 100%;
+            background: var(--ui-accent);
+            box-shadow: 0 0 10px var(--ui-accent);
+        }
+
+        /* Configuration Controls */
+        .config-panel {
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .btn-core {
+            background: #0a0a0a;
+            color: white;
+            border: 1px solid #222;
+            padding: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-core:hover {
+            border-color: var(--ui-accent);
+            color: var(--ui-accent);
+        }
+
+        input[type="color"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 100%;
+            height: 45px;
+            background: #0a0a0a;
+            border: 1px solid #222;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+        }
+
+        input[type="range"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #222;
+            border-radius: 2px;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: var(--ui-accent);
+            margin-top: -6px;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--ui-accent);
+        }
+
+        /* Arena Layout */
+        #arena {
+            flex-grow: 1;
+            position: relative;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Overlays */
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.5s var(--easing);
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 6rem;
+            letter-spacing: -4px;
+            margin: 0;
+            font-weight: 100;
+            color: var(--ui-accent);
+            transition: color 0.3s ease;
+        }
+
+        .msg-text {
+            color: #444;
+            letter-spacing: 3px;
+            margin-top: 10px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+        }
+
+        #credit-link {
+            position: absolute;
+            bottom: 25px;
+            left: 25px;
+            color: #333;
+            font-size: 0.75rem;
+            text-decoration: none;
+            z-index: 120;
+            transition: color 0.3s ease;
+            font-weight: 200;
+        }
+
+        #credit-link:hover {
+            color: var(--ui-accent);
+        }
+
+        #flash {
+            position: absolute;
+            inset: 0;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 200;
+        }
+    </style>
+</head>
+<body class="state-home">
+
+<div id="flash"></div>
+
+<a href="https://github.com/Ronnayy121" target="_blank" id="credit-link">Created By @BackTrackEcho</a>
+
+<div id="root">
+    <aside id="sidebar">
+        <div class="header-label" id="main-brand">RetroSnake™</div>
+
+        <div class="stat-block">
+            <div class="stat-label">Level Index</div>
+            <div id="lvl-txt" class="stat-value">01</div>
+            <div class="progress-bg"><div id="progress-fill"></div></div>
+        </div>
+
+        <div class="stat-block">
+            <div class="stat-label">Current Score</div>
+            <div id="score-txt" class="stat-value">000</div>
+        </div>
+
+        <div class="stat-block">
+            <div class="stat-label">System Peak</div>
+            <div id="best-txt" class="stat-value">000</div>
+        </div>
+
+        <div class="config-panel">
+            <div class="input-group">
+                <div class="stat-label">Audio Gain: <span id="vol-pct">70%</span></div>
+                <input type="range" id="vol-slider" min="0" max="1" step="0.01" value="0.7">
+            </div>
+            <div class="input-group">
+                <div class="stat-label">Snake Hue</div>
+                <input type="color" id="picker-snake" value="#00d2ff">
+            </div>
+            <div class="input-group">
+                <div class="stat-label">Interface Hue</div>
+                <input type="color" id="picker-ui" value="#00d2ff">
+            </div>
+            <button class="btn-core" id="audio-toggle">System Audio: On</button>
+        </div>
+    </aside>
+
+    <div id="separator"></div>
+
+    <main id="arena">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="home-ui" class="overlay">
+            <h1>RetroSnake™</h1>
+            <div class="msg-text">System initialization ready</div>
+            <button class="btn-core" id="start-btn" style="margin-top: 50px; padding: 22px 90px; font-size: 1.2rem;">Establish Link</button>
+        </div>
+
+        <div id="pause-ui" class="overlay hidden">
+            <h1 style="font-size: 5rem;">Link Paused</h1>
+            <div class="msg-text">Sequence halted. Press 'P' to resume.</div>
+        </div>
+
+        <div id="death-ui" class="overlay hidden">
+            <h1 style="color: #ff3333;">Link Severed</h1>
+            <div class="msg-text">Connection terminated</div>
+            <button class="btn-core" id="retry-btn" style="padding: 15px 60px; margin-top: 30px;">Restart</button>
+        </div>
+    </main>
+</div>
+
+<script>
+    /**
+     * PROCEDURAL AMBIENT AUDIO ENGINE
+     * Manages evolving synth pads and SFX using Web Audio API.
+     */
+    class ProceduralAudio {
+        constructor() {
+            this.ctx = null;
+            this.master = null;
+            this.musicGain = null;
+            this.enabled = true;
+            this.activeOscillators = [];
+            this.musicRunning = false;
+        }
+
+        init() {
+            if (this.ctx) return;
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.master = this.ctx.createGain();
+            this.master.connect(this.ctx.destination);
+            this.master.gain.value = 1.0;
+
+            this.musicGain = this.ctx.createGain();
+            this.musicGain.connect(this.master);
+            this.musicGain.gain.value = 0.7;
+        }
+
+        playSFX(freq, type, dur, endFreq = 0) {
+            if (!this.enabled || !this.ctx) return;
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+            
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + dur);
+            
+            g.gain.setValueAtTime(0.3, this.ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+            
+            osc.connect(g);
+            g.connect(this.master);
+            osc.start();
+            osc.stop(this.ctx.currentTime + dur);
+        }
+
+        async startAmbientMusic() {
+            if (this.musicRunning || !this.enabled) return;
+            this.musicRunning = true;
+            this.ambientLoop();
+        }
+
+        stopAmbientMusic() {
+            this.musicRunning = false;
+            this.activeOscillators.forEach(osc => {
+                try { osc.stop(); } catch(e) {}
+            });
+            this.activeOscillators = [];
+        }
+
+        ambientLoop() {
+            if (!this.musicRunning) return;
+            
+            // Create evolved pad chords (non-metronome)
+            const rootFreq = 55; // A1
+            const harmonics = [1, 1.5, 2, 2.5, 3];
+            
+            harmonics.forEach(h => {
+                const freq = rootFreq * h;
+                this.createEvolvingPad(freq, 8 + Math.random() * 4);
+            });
+
+            // Schedule next evolution
+            setTimeout(() => this.ambientLoop(), 8000);
+        }
+
+        createEvolvingPad(freq, duration) {
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            // Slight detune for "width"
+            osc.detune.setValueAtTime(Math.random() * 10 - 5, this.ctx.currentTime);
+
+            g.gain.setValueAtTime(0, this.ctx.currentTime);
+            g.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + duration * 0.4);
+            g.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration);
+
+            osc.connect(g);
+            g.connect(this.musicGain);
+            
+            osc.start();
+            this.activeOscillators.push(osc);
+            osc.stop(this.ctx.currentTime + duration);
+            
+            // Cleanup references
+            setTimeout(() => {
+                this.activeOscillators = this.activeOscillators.filter(o => o !== osc);
+            }, duration * 1000);
+        }
+
+        setVolume(val) {
+            if (this.musicGain) this.musicGain.gain.value = val;
+        }
+    }
+
+    /**
+     * GAME ENGINE
+     */
+    const audio = new ProceduralAudio();
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const pickerSnake = document.getElementById('picker-snake');
+    const pickerUI = document.getElementById('picker-ui');
+    const volSlider = document.getElementById('vol-slider');
+    const volPct = document.getElementById('vol-pct');
+    const flash = document.getElementById('flash');
+    const root = document.documentElement;
+    
+    const scoreTxt = document.getElementById('score-txt');
+    const bestTxt = document.getElementById('best-txt');
+    const lvlTxt = document.getElementById('lvl-txt');
+    const lvlFill = document.getElementById('progress-fill');
+    const body = document.body;
+
+    let snake = [], food = {}, dir = {x:1, y:0}, nextDir = {x:1, y:0};
+    let score = 0, highscore = 0, level = 1, active = false, paused = false;
+    let gridCount = 28, cellSize = 0;
+    let lastTick = 0, levelStart = 0, pauseStart = 0;
+    let bgHue = 210;
+
+    const LEVEL_TIME = 120000; 
+
+    function resize() {
+        const size = Math.min(window.innerWidth - 350, window.innerHeight) * 0.98;
+        canvas.width = size;
+        canvas.height = size;
+        cellSize = size / gridCount;
+    }
+
+    function init() {
+        snake = [{x:12, y:14}, {x:11, y:14}, {x:10, y:14}];
+        dir = {x:1, y:0};
+        nextDir = {x:1, y:0};
+        score = 0;
+        level = 1;
+        levelStart = Date.now();
+        scoreTxt.innerText = "000";
+        lvlTxt.innerText = "01";
+        spawnFood();
+        root.style.setProperty('--separator-color', pickerUI.value);
+    }
+
+    function spawnFood() {
+        food = {
+            x: Math.floor(Math.random() * gridCount),
+            y: Math.floor(Math.random() * gridCount)
+        };
+        if (snake.some(s => s.x === food.x && s.y === food.y)) spawnFood();
+    }
+
+    function triggerFlash(o) {
+        flash.style.opacity = o;
+        setTimeout(() => {
+            flash.style.transition = 'opacity 1s ease';
+            flash.style.opacity = '0';
+        }, 50);
+        flash.style.transition = 'none';
+    }
+
+    function togglePause() {
+        if (!active) return;
+        paused = !paused;
+        const pauseUi = document.getElementById('pause-ui');
+        if (paused) {
+            pauseStart = Date.now();
+            audio.stopAmbientMusic();
+            audio.playSFX(300, 'sine', 0.2, 150);
+            pauseUi.classList.remove('hidden');
+        } else {
+            levelStart += (Date.now() - pauseStart);
+            audio.startAmbientMusic();
+            audio.playSFX(150, 'sine', 0.2, 300);
+            pauseUi.classList.add('hidden');
+        }
+    }
+
+    function update(time) {
+        if (!active || paused) {
+            if (paused) render();
+            requestAnimationFrame(update);
+            return;
+        }
+
+        const now = Date.now();
+        const elapsed = now - levelStart;
+
+        if (elapsed >= LEVEL_TIME) {
+            level++;
+            if (level > 10) level = 1;
+            levelStart = now;
+            lvlTxt.innerText = level.toString().padStart(2, '0');
+            audio.playSFX(440, 'sawtooth', 0.8, 880);
+            triggerFlash(0.3);
+        }
+        lvlFill.style.width = (elapsed / LEVEL_TIME * 100) + "%";
+
+        const speed = Math.max(105 - (level * 8) - (elapsed / LEVEL_TIME * 15), 24);
+
+        if (time - lastTick > speed) {
+            dir = nextDir;
+            const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+            if (head.x < 0 || head.x >= gridCount || head.y < 0 || head.y >= gridCount || 
+                snake.some(s => s.x === head.x && s.y === head.y)) {
+                gameOver();
+                return;
+            }
+
+            snake.unshift(head);
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                scoreTxt.innerText = score.toString().padStart(3, '0');
+                audio.playSFX(1100, 'sine', 0.1, 1700);
+                spawnFood();
+            } else {
+                snake.pop();
+            }
+            lastTick = time;
+        }
+
+        render();
+        requestAnimationFrame(update);
+    }
+
+    function render() {
+        bgHue = (bgHue + 0.3) % 360;
+        ctx.fillStyle = `hsl(${bgHue}, 40%, 3%)`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // UI Hue Grid Lines
+        ctx.strokeStyle = pickerUI.value;
+        ctx.globalAlpha = 0.4; 
+        ctx.lineWidth = 1;
+        for(let i=0; i<=gridCount; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * cellSize, 0); ctx.lineTo(i * cellSize, canvas.height); ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, i * cellSize); ctx.lineTo(canvas.width, i * cellSize); ctx.stroke();
+        }
+        ctx.globalAlpha = 1.0;
+
+        // Food
+        const p = Math.sin(Date.now() / 150) * 5;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#ff2222';
+        ctx.fillStyle = '#ff2222';
+        ctx.beginPath();
+        ctx.arc(food.x * cellSize + cellSize/2, food.y * cellSize + cellSize/2, (cellSize/3) + p/2, 0, Math.PI*2);
+        ctx.fill();
+
+        // Snake
+        const sClr = pickerSnake.value;
+        ctx.shadowColor = sClr;
+        snake.forEach((seg, i) => {
+            ctx.shadowBlur = i === 0 ? 30 : 10;
+            ctx.fillStyle = sClr;
+            ctx.beginPath();
+            ctx.roundRect(seg.x * cellSize + 2, seg.y * cellSize + 2, cellSize - 4, cellSize - 4, i === 0 ? 8 : 4);
+            ctx.fill();
+        });
+        ctx.shadowBlur = 0;
+    }
+
+    function gameOver() {
+        active = false;
+        audio.playSFX(150, 'sawtooth', 0.8, 30);
+        triggerFlash(0.5);
+        if (score > highscore) {
+            highscore = score;
+            bestTxt.innerText = highscore.toString().padStart(3, '0');
+        }
+        root.style.setProperty('--separator-color', '#000000');
+        document.getElementById('death-ui').classList.remove('hidden');
+        audio.stopAmbientMusic();
+    }
+
+    function quit() {
+        active = false;
+        paused = false;
+        audio.playSFX(400, 'sine', 0.5, 60); 
+        audio.stopAmbientMusic();
+        triggerFlash(0.2);
+        root.style.setProperty('--separator-color', '#000000');
+        body.classList.remove('state-active');
+        document.getElementById('home-ui').classList.remove('hidden');
+        document.getElementById('death-ui').classList.add('hidden');
+        document.getElementById('pause-ui').classList.add('hidden');
+    }
+
+    // Controls
+    window.addEventListener('keydown', e => {
+        const k = e.key.toLowerCase();
+        if (k === 'p') { togglePause(); return; }
+        if (paused) return;
+        if ((k === 'w' || k === 'arrowup') && dir.y === 0) nextDir = {x:0, y:-1};
+        if ((k === 's' || k === 'arrowdown') && dir.y === 0) nextDir = {x:0, y:1};
+        if ((k === 'a' || k === 'arrowleft') && dir.x === 0) nextDir = {x:-1, y:0};
+        if ((k === 'd' || k === 'arrowright') && dir.x === 0) nextDir = {x:1, y:0};
+        if (e.key === 'Escape') quit();
+    });
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+        audio.init();
+        audio.playSFX(1200, 'sine', 0.2); 
+        audio.startAmbientMusic();
+        document.getElementById('home-ui').classList.add('hidden');
+        body.classList.add('state-active');
+        init();
+        active = true;
+        triggerFlash(0.3);
+        requestAnimationFrame(update);
+    });
+
+    document.getElementById('retry-btn').addEventListener('click', () => {
+        audio.playSFX(1200, 'sine', 0.2);
+        audio.startAmbientMusic();
+        document.getElementById('death-ui').classList.add('hidden');
+        init();
+        active = true;
+        triggerFlash(0.3);
+        requestAnimationFrame(update);
+    });
+
+    volSlider.addEventListener('input', () => {
+        const val = volSlider.value;
+        audio.setVolume(val);
+        volPct.innerText = Math.round(val * 100) + "%";
+    });
+
+    pickerUI.addEventListener('input', () => {
+        const v = pickerUI.value;
+        root.style.setProperty('--ui-accent', v);
+        if (active && !paused) root.style.setProperty('--separator-color', v);
+        // Swiping sound
+        const r = parseInt(v.substring(1,3), 16);
+        audio.playSFX(200 + r, 'sine', 0.05, 250 + r);
+    });
+
+    pickerSnake.addEventListener('input', () => {
+        const v = pickerSnake.value;
+        const g = parseInt(v.substring(3,5), 16);
+        audio.playSFX(400 + g, 'sine', 0.05, 450 + g);
+    });
+
+    document.getElementById('audio-toggle').addEventListener('click', function() {
+        audio.enabled = !audio.enabled;
+        this.innerText = `System Audio: ${audio.enabled ? 'On' : 'Off'}`;
+        if (!audio.enabled) audio.stopAmbientMusic(); else if (active && !paused) audio.startAmbientMusic();
+        audio.playSFX(600, 'sine', 0.1);
+    });
+
+    window.addEventListener('resize', resize);
+    resize();
+    render();
+</script>
+</body>
+</html>
